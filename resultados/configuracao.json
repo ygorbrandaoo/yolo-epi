@@ -1,0 +1,37 @@
+{
+  "modelos": {
+    "YOLOv8n": "yolov8n.pt",
+    "YOLO11n": "yolo11n.pt"
+  },
+  "treino": {
+    "epochs": 30,
+    "imgsz": 640,
+    "batch": 16,
+    "seed": 42,
+    "optimizer": "AdamW",
+    "lr0": 0.001,
+    "lrf": 0.01,
+    "weight_decay": 0.0005,
+    "patience": 0,
+    "deterministic": true,
+    "device": 0,
+    "workers": 2,
+    "amp": true,
+    "cache": false,
+    "close_mosaic": 5,
+    "plots": true,
+    "save": true,
+    "save_period": 10,
+    "fraction": 1.0
+  },
+  "ambiente": {
+    "python": "3.13.16 (main, Oct  1 2026, 15:40:24) [GCC 13.3.0]",
+    "plataforma": "Linux-6.6.159+-x86_64-with-glibc2.39",
+    "ultralytics": "8.3.221",
+    "torch": "2.11.0+cu130",
+    "cuda": "13.0",
+    "gpu": "Tesla T4",
+    "inicio_utc": "2026-10-30T20:01:29.713920+00:00"
+  },
+  "confianca_visual": 0.25
+}
