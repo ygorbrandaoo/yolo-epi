@@ -4,7 +4,23 @@ Comparação de **YOLOv8n e YOLO11n** na base Construction-PPE, com treinamento,
 avaliação no teste e imagens com bounding boxes. Atividade realizada com a API
 Python da Ultralytics e Google Colab.
 
-[![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ygorbrandaoo/yolo-epi/blob/main/yolo_epi.ipynb)
+## Entrega da atividade
+
+**Formato escolhido: link do repositório no GitHub.** O código, os resultados dos
+treinamentos e as imagens com boxes estão reunidos aqui para avaliação.
+O Colab foi usado para executar o experimento e também pode ser usado para reproduzi-lo.
+
+| O que foi pedido pelo professor | Como foi atendido | Onde conferir |
+|---|---|---|
+| Implementar o YOLO seguindo o guia fornecido | Uso da API Python da Ultralytics, com carregamento de pesos, treinamento, avaliação e predição | [Notebook com código e resultados](yolo_epi.ipynb) |
+| Treinar com uma base de dados de livre escolha | Base Construction-PPE, dedicada a EPIs e pessoas; 30 épocas de fine-tuning para cada modelo | [Base e protocolo](#base-e-protocolo), [histórico do YOLOv8n](resultados/treinos/yolov8n/results.csv) e [histórico do YOLO11n](resultados/treinos/yolo11n/results.csv) |
+| Enviar resultados com marcações de boxes | 141 imagens de teste anotadas por modelo, com classe e confiança; seis comparações entre referência e previsões | [Exemplos visíveis abaixo](#imagens-com-boxes), [todas as previsões do YOLOv8n](resultados/previsoes/yolov8n/) e [do YOLO11n](resultados/previsoes/yolo11n/) |
+| Comparar duas versões do YOLO | YOLOv8n e YOLO11n treinados nos mesmos dados e condições, comparando precisão, recall, mAP e tempo de inferência | [Tabela de comparação](#resultados-no-teste), [CSV](resultados/comparacao.csv) e [conclusão](resultados/conclusao.md) |
+| Entregar por link de Colab ou GitHub | Entrega pelo GitHub, com evidências consultáveis no README, no notebook e nas pastas de resultados | Este repositório |
+
+Os resultados podem ser avaliados diretamente nesta página e no notebook,
+sem repetir os treinamentos. A implementação usa modelos pré-treinados e faz
+fine-tuning na base escolhida, conforme o fluxo da biblioteca indicada no enunciado.
 
 O [notebook](yolo_epi.ipynb) inclui os resultados salvos e as células para reproduzir
 o experimento. As métricas e imagens iniciais foram importadas da execução real
@@ -102,6 +118,8 @@ enquanto `Person` tem 1.770. A análise deve considerar esse contexto.
 A ausência de uma detecção de equipamento, isoladamente, não comprova sua ausência.
 
 ## Reproduzir no Colab
+
+[![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ygorbrandaoo/yolo-epi/blob/main/yolo_epi.ipynb)
 
 1. Abra o notebook pelo botão **Abrir no Colab**.
 2. Selecione **Ambiente de execução > Alterar tipo de ambiente de execução > GPU T4**.

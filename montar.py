@@ -37,7 +37,8 @@ de bounding boxes, classes e confiança.
 
 **Como reproduzir:** selecione uma GPU em **Ambiente de execução > Alterar tipo de
 ambiente de execução** e clique em **Executar tudo**. Ao terminar, salve este
-notebook com as novas saídas e compartilhe o link com permissão de leitura.
+notebook com as novas saídas. O formato de entrega escolhido é o link do
+repositório público no GitHub, com o código e os resultados disponíveis.
 
 Este notebook baixa a base e os pesos pré-treinados oficiais. Usa a API Python
 da Ultralytics indicada no enunciado e faz fine-tuning dos dois modelos.
@@ -443,10 +444,11 @@ O ZIP inclui pesos treinados, tabelas CSV, gráficos, matrizes, boxes de todas a
 imagens de teste, exemplos lado a lado, auditoria da base, configuração e conclusão.
 Não inclui as imagens originais completas da base.
 
-**Entrega ao professor:** salve este notebook com todas as saídas visíveis,
-compartilhe o link com acesso de leitura e confira o acesso em janela anônima.
-Guarde o ZIP como cópia dos resultados. O compartilhamento do Colab é a entrega
-por link; baixar o ZIP sozinho não cria esse link.
+**Entrega ao professor:** envie o link do repositório público no GitHub.
+O repositório reúne o notebook, as métricas, os históricos de treinamento e as
+imagens com boxes. O README relaciona cada pedido do professor às evidências.
+Guarde o ZIP como cópia dos resultados. O Colab é usado para executar ou
+reproduzir o experimento; a entrega escolhida é o repositório.
 ''')
 codigo('''
 ARQUIVO_ZIP = Path(shutil.make_archive(str(PASTA.parent / 'entrega'), 'zip', root_dir=PASTA))
