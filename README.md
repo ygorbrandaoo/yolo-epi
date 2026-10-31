@@ -43,6 +43,9 @@ seed 42, AdamW e taxa inicial de aprendizado de 0,001, em uma GPU Tesla T4.
 O checkpoint `best.pt` foi escolhido pela validação; o teste foi usado para avaliação.
 Na segunda etapa, os melhores mAP50-95 de validação ocorreram nas épocas 42 e 48;
 a paciência de dez épocas não foi atingida antes do limite de 50.
+Na primeira etapa a parada antecipada estava desativada e os melhores mAP50-95
+de validação ocorreram nas épocas 30 (YOLOv8n) e 29 (YOLO11n), no fim do treino.
+Os modelos nano ainda estavam melhorando, então 30 épocas podem ter sido pouco.
 
 As condições são iguais entre as duas versões dentro de cada etapa. Entre etapas,
 mudamos **tamanho e número de épocas simultaneamente**, portanto não isolamos o
@@ -157,6 +160,7 @@ de uma detecção de equipamento, isoladamente, não comprova sua ausência.
 |---|---|---|
 | Notebook com código e resultados salvos | [yolo_epi.ipynb](yolo_epi.ipynb) | [experimento.ipynb](experimento.ipynb) |
 | Métricas por modelo e por classe | [Pasta de resultados](resultados/) | [Pasta de resultados](resultados/small/) |
+| Conclusão de cada execução (só os dois modelos da etapa) | [conclusao.md](resultados/conclusao.md) | [conclusao.md](resultados/small/conclusao.md) |
 | Históricos, parâmetros e curvas de treino | [Treinos nano](resultados/treinos/) | [Treinos small](resultados/small/treinos/) |
 | Matrizes de confusão e curvas de teste | [Teste nano](resultados/teste/) | [Teste small](resultados/small/teste/) |
 | Todas as imagens com previsões | [YOLOv8n](resultados/previsoes/yolov8n/) · [YOLO11n](resultados/previsoes/yolo11n/) | [YOLOv8s](resultados/small/previsoes/yolov8s/) · [YOLO11s](resultados/small/previsoes/yolo11s/) |
