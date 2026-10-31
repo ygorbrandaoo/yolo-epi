@@ -1,9 +1,10 @@
-"""Gera o notebook independente. Execute: python3 montar.py."""
+"""Gera os notebooks de referência e de novos experimentos: python3 montar.py."""
 
 import json
 import csv
 import base64
 import textwrap
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -27,8 +28,46 @@ def codigo(texto):
     celula('code', texto)
 
 
+def fonte_parametros(tamanho='n', epocas=30, batch=16, patience=0):
+    return textwrap.dedent(f'''
+    # ALTERE ESTES VALORES ANTES DE EXECUTAR TUDO.
+    TAMANHO = {tamanho!r}  # 'n': nano, 's': small, 'm': medium
+    EPOCHS = {epocas}
+    PATIENCE = {patience}  # épocas sem melhora na validação; 0 desativa a parada antecipada
+    IMGSZ = 640  # múltiplo de 32, por exemplo: 640, 768 ou 960
+    BATCH = {batch}  # se faltar memória, reduza para 8 ou 4 nos dois modelos
+    SEED = 42
+    LR0 = 0.001  # taxa inicial de aprendizado do AdamW
+    CONF_VISUAL = 0.25  # altera as boxes exibidas; não o cálculo do mAP
+
+    from math import isfinite
+
+    if TAMANHO not in ('n', 's', 'm'):
+        raise ValueError("TAMANHO deve ser 'n', 's' ou 'm'.")
+    for nome, valor in [('EPOCHS', EPOCHS), ('IMGSZ', IMGSZ), ('BATCH', BATCH)]:
+        if type(valor) is not int or valor <= 0:
+            raise ValueError(f'{{nome}} deve ser um inteiro positivo.')
+    if IMGSZ % 32:
+        raise ValueError('IMGSZ deve ser múltiplo de 32.')
+    if type(SEED) is not int or SEED < 0:
+        raise ValueError('SEED deve ser um inteiro não negativo.')
+    if type(PATIENCE) is not int or PATIENCE < 0:
+        raise ValueError('PATIENCE deve ser um inteiro não negativo.')
+    if not isinstance(LR0, (int, float)) or not isfinite(LR0) or LR0 <= 0:
+        raise ValueError('LR0 deve ser um número positivo e finito.')
+    if not isinstance(CONF_VISUAL, (int, float)) or not isfinite(CONF_VISUAL) or not 0 <= CONF_VISUAL <= 1:
+        raise ValueError('CONF_VISUAL deve estar entre 0 e 1.')
+
+    NOME_V8 = f'YOLOv8{{TAMANHO}}'
+    NOME_V11 = f'YOLO11{{TAMANHO}}'
+    MODELOS = {{NOME_V8: f'yolov8{{TAMANHO}}.pt', NOME_V11: f'yolo11{{TAMANHO}}.pt'}}
+    print('Modelos:', MODELOS)
+    print(f'Limite de épocas: {{EPOCHS}} | paciência: {{PATIENCE}} | resolução: {{IMGSZ}} | batch: {{BATCH}} | seed: {{SEED}}')
+    ''').strip() + '\n'
+
+
 md('''
-# Detecção de EPIs em obras: YOLOv8n versus YOLO11n
+# Detecção de EPIs em obras: YOLOv8 versus YOLO11
 
 **Objetivo:** treinar duas versões do YOLO para detectar equipamentos de proteção
 individual (EPIs), pessoas e as demais classes da base Construction-PPE.
@@ -48,6 +87,26 @@ As células de código seguintes permitem reproduzir o experimento completo.
 ''')
 
 md('''
+## Parâmetros editáveis
+
+Edite somente o bloco abaixo para escolher o tamanho dos modelos, as épocas,
+a resolução, o batch, a parada antecipada e a taxa de aprendizado. Os dois modelos usam os mesmos
+ajustes. As tabelas, os nomes das pastas e a conclusão acompanham o tamanho escolhido.
+
+Depois de alterar os parâmetros, execute o notebook desde o início para treinar
+os dois modelos com a nova configuração. Cada execução cria uma pasta e um ZIP
+próprios. Os resultados publicados da execução original são preservados.
+
+`EPOCHS` é o limite máximo por modelo. `PATIENCE = 10` ativa a parada após
+10 épocas sem melhora do mAP50-95 na validação, critério da versão usada da
+Ultralytics. O checkpoint `best.pt` é preservado e usado na avaliação final.
+`PATIENCE = 0` desativa essa parada. A conclusão registra as épocas efetivamente
+realizadas, que podem ser diferentes entre os dois modelos.
+''')
+codigo(fonte_parametros())
+celulas[-1]['id'] = 'parametros'
+
+md('''
 ## 1. Problema, base e protocolo
 
 Detecção de objetos responde **o que aparece e onde aparece**. Cada previsão
@@ -63,12 +122,12 @@ de equipamento, isoladamente, não comprova que ele esteja ausente.
 
 **Protocolo:**
 
-- YOLOv8n e YOLO11n iniciam com pesos oficiais pré-treinados em COCO.
-- Mesmos dados, 30 épocas, imagens de 640 pixels, batch 16 e seed 42.
-- Mesmo otimizador AdamW e hiperparâmetros explícitos; sem parada antecipada.
+- YOLOv8 e YOLO11 iniciam com pesos oficiais pré-treinados em COCO.
+- Mesmos dados, épocas, resolução, batch e seed definidos no bloco de parâmetros.
+- Mesmo otimizador AdamW, hiperparâmetros explícitos e regra de parada `PATIENCE`.
 - O treino aprende os pesos. A validação escolhe o checkpoint `best.pt`.
 - O teste fica reservado para avaliar os checkpoints já escolhidos.
-- Uma execução por modelo. A variante `n` aproxima o porte dos modelos,
+- Uma execução por modelo. Usar a mesma variante (`n`, `s` ou `m`) aproxima o porte,
   mas não torna suas arquiteturas ou quantidades de parâmetros idênticas.
 
 Antes do treino, o notebook verifica as anotações e elimina duplicatas exatas
@@ -89,9 +148,8 @@ codigo('import subprocess\nimport sys\n\n'
 md('''
 ## 3. Configuração e ambiente
 
-Para encurtar a execução, altere `EPOCHS` para 15 **antes** de treinar os dois
-modelos. Se faltar memória, altere `BATCH` para 8 antes de ambos os treinos.
-Os valores usados são registrados automaticamente.
+O bloco de parâmetros no início controla esta execução. Os valores usados,
+os pesos de origem e o ambiente são registrados automaticamente.
 ''')
 codigo('''
 import os
@@ -117,12 +175,6 @@ from PIL import Image, ImageDraw
 from IPython.display import display, Markdown, FileLink
 from ultralytics import YOLO, settings
 
-EPOCHS = 30
-BATCH = 16
-IMGSZ = 640
-SEED = 42
-CONF_VISUAL = 0.25
-MODELOS = {'YOLOv8n': 'yolov8n.pt', 'YOLO11n': 'yolo11n.pt'}
 if not torch.cuda.is_available():
     raise RuntimeError('GPU indisponível. No Colab, selecione GPU em Ambiente de execução > Alterar tipo de ambiente de execução e execute novamente.')
 DEVICE = 0
@@ -131,9 +183,9 @@ PASTA.mkdir(parents=True)
 settings.update({'datasets_dir': str(BASE / 'dados'), 'sync': False, 'wandb': False})
 
 PARAMETROS = dict(epochs=EPOCHS, imgsz=IMGSZ, batch=BATCH, seed=SEED,
-                 optimizer='AdamW', lr0=0.001, lrf=0.01, weight_decay=0.0005,
-                 patience=0, deterministic=True, device=DEVICE, workers=2,
-                 amp=True, cache=False, close_mosaic=5, plots=True, save=True,
+                 optimizer='AdamW', lr0=LR0, lrf=0.01, weight_decay=0.0005,
+                 patience=PATIENCE, deterministic=True, device=DEVICE, workers=2,
+                 amp=True, cache=False, close_mosaic=min(5, EPOCHS), plots=True, save=True,
                  save_period=10, fraction=1.0)
 AMBIENTE = {'python': sys.version, 'plataforma': platform.platform(),
             'ultralytics': ultralytics.__version__, 'torch': torch.__version__,
@@ -146,7 +198,7 @@ AMBIENTE = {'python': sys.version, 'plataforma': platform.platform(),
     subprocess.check_output([sys.executable, '-m', 'pip', 'freeze'], text=True), encoding='utf-8')
 print(json.dumps(AMBIENTE, indent=2, ensure_ascii=False))
 print('Saída:', PASTA)
-CHECKPOINTS, TEMPOS = {}, {}
+CHECKPOINTS, TEMPOS, EPOCAS_REALIZADAS = {}, {}, {}
 ''')
 
 md('''
@@ -223,7 +275,7 @@ plt.show()
 ''')
 
 md('''
-## 6. Treinamento do YOLOv8n
+## 6. Treinamento do YOLOv8
 
 O modelo recebe as imagens e as caixas de referência da base. A cada época,
 a biblioteca registra perdas e métricas de validação. `best.pt` é escolhido
@@ -231,30 +283,32 @@ automaticamente pela função de fitness de validação da Ultralytics.
 ''')
 codigo('''
 inicio = time.perf_counter()
-modelo = YOLO(MODELOS['YOLOv8n'])
-modelo.train(data=str(DATA_YAML), project=str(PASTA / 'treinos'), name='yolov8n', **PARAMETROS)
-CHECKPOINTS['YOLOv8n'] = Path(modelo.trainer.best)
-TEMPOS['YOLOv8n'] = (time.perf_counter() - inicio) / 60
+modelo = YOLO(MODELOS[NOME_V8])
+modelo.train(data=str(DATA_YAML), project=str(PASTA / 'treinos'), name=NOME_V8.lower(), **PARAMETROS)
+CHECKPOINTS[NOME_V8] = Path(modelo.trainer.best)
+EPOCAS_REALIZADAS[NOME_V8] = len(pd.read_csv(modelo.trainer.csv))
+TEMPOS[NOME_V8] = (time.perf_counter() - inicio) / 60
 del modelo
 torch.cuda.empty_cache()
-print('Checkpoint:', CHECKPOINTS['YOLOv8n'])
+print('Checkpoint:', CHECKPOINTS[NOME_V8])
 ''')
 
 md('''
-## 7. Treinamento do YOLO11n
+## 7. Treinamento do YOLO11
 
 Usa os mesmos manifestos e parâmetros. O histórico de cada modelo fica em
 uma pasta própria para evitar que os resultados sejam sobrescritos.
 ''')
 codigo('''
 inicio = time.perf_counter()
-modelo = YOLO(MODELOS['YOLO11n'])
-modelo.train(data=str(DATA_YAML), project=str(PASTA / 'treinos'), name='yolo11n', **PARAMETROS)
-CHECKPOINTS['YOLO11n'] = Path(modelo.trainer.best)
-TEMPOS['YOLO11n'] = (time.perf_counter() - inicio) / 60
+modelo = YOLO(MODELOS[NOME_V11])
+modelo.train(data=str(DATA_YAML), project=str(PASTA / 'treinos'), name=NOME_V11.lower(), **PARAMETROS)
+CHECKPOINTS[NOME_V11] = Path(modelo.trainer.best)
+EPOCAS_REALIZADAS[NOME_V11] = len(pd.read_csv(modelo.trainer.csv))
+TEMPOS[NOME_V11] = (time.perf_counter() - inicio) / 60
 del modelo
 torch.cuda.empty_cache()
-print('Checkpoint:', CHECKPOINTS['YOLO11n'])
+print('Checkpoint:', CHECKPOINTS[NOME_V11])
 ''')
 
 md('''
@@ -262,6 +316,8 @@ md('''
 
 - **Precisão:** proporção das detecções consideradas positivas que estão corretas.
 - **Recall:** proporção dos objetos anotados que foram encontrados.
+- **F1 por classe:** média harmônica da precisão e do recall daquela classe.
+- **Macro-F1:** média dos F1 das classes presentes no teste, com o mesmo peso por classe.
 - **IoU:** interseção dividida pela união entre caixa prevista e caixa de referência.
 - **mAP50:** média da precisão média por classe, exigindo IoU de pelo menos 0,50.
 - **mAP50-95:** média em limiares de IoU de 0,50 até 0,95; exige localização mais precisa.
@@ -286,17 +342,21 @@ for nome, checkpoint in CHECKPOINTS.items():
                           batch=1, device=DEVICE, half=False, conf=0.001, iou=0.7,
                           plots=True, save_txt=True, save_conf=True,
                           project=str(PASTA / 'teste'), name=nome.lower(), workers=2)
+    # Os arrays seguem ap_class_index, não todas as classes da base.
+    classes_modelo = resumir_classes(nome, NOMES, CONTAGENS['test'],
+                                    metricas.box.ap_class_index, metricas.box.p,
+                                    metricas.box.r, metricas.box.ap50, metricas.box.ap)
+    por_classe.extend(classes_modelo)
+    macro_f1 = sum(c['f1'] for c in classes_modelo) / len(classes_modelo)
     linhas.append({'modelo': nome, 'precisao': float(metricas.box.mp),
                    'recall': float(metricas.box.mr), 'mAP50': float(metricas.box.map50),
                    'mAP50-95': float(metricas.box.map),
+                   'macro_f1': macro_f1,
                    'inferencia_ms': float(metricas.speed['inference']),
                    'tempo_treino_min': TEMPOS[nome],
+                   'epocas_realizadas': EPOCAS_REALIZADAS[nome],
                    'parametros_milhoes': sum(p.numel() for p in modelo.model.parameters()) / 1e6,
                    'pesos_MB': checkpoint.stat().st_size / 1e6})
-    # Os arrays seguem ap_class_index, não todas as classes da base.
-    por_classe.extend(resumir_classes(nome, NOMES, CONTAGENS['test'],
-                                     metricas.box.ap_class_index, metricas.box.p,
-                                     metricas.box.r, metricas.box.ap50, metricas.box.ap))
     del modelo
     torch.cuda.empty_cache()
 
@@ -307,7 +367,7 @@ classes.to_csv(PASTA / 'comparacao_por_classe.csv', index=False)
 display(comparacao.round(4))
 display(classes.round(4))
 fig, eixos = plt.subplots(1, 2, figsize=(13, 4))
-comparacao.set_index('modelo')[['precisao', 'recall', 'mAP50', 'mAP50-95']].plot.bar(ax=eixos[0], ylim=(0, 1), rot=0)
+comparacao.set_index('modelo')[['precisao', 'recall', 'macro_f1', 'mAP50', 'mAP50-95']].plot.bar(ax=eixos[0], ylim=(0, 1), rot=0)
 eixos[0].set_title('Métricas no teste')
 comparacao.set_index('modelo')['inferencia_ms'].plot.bar(ax=eixos[1], rot=0, color=['#345995', '#32936f'])
 eixos[1].set_title('Inferência no teste, batch 1 (menor é melhor)')
@@ -319,6 +379,11 @@ classes.pivot(index='classe', columns='modelo', values='AP50-95').plot.bar(figsi
 plt.title('AP50-95 por classe presente no teste')
 plt.tight_layout()
 plt.savefig(PASTA / 'comparacao_por_classe.png', dpi=160)
+plt.show()
+classes.pivot(index='classe', columns='modelo', values='f1').plot.bar(figsize=(13, 4), ylim=(0, 1), rot=40)
+plt.title('F1 por classe presente no teste')
+plt.tight_layout()
+plt.savefig(PASTA / 'f1_por_classe.png', dpi=160)
 plt.show()
 ''')
 
@@ -400,29 +465,36 @@ duplicatas exatas, imagens muito parecidas ou da mesma cena podem permanecer
 em divisões diferentes. Não foi realizado agrupamento por obra ou por câmera.
 ''')
 codigo('''
-v8 = comparacao.set_index('modelo').loc['YOLOv8n']
-v11 = comparacao.set_index('modelo').loc['YOLO11n']
+v8 = comparacao.set_index('modelo').loc[NOME_V8]
+v11 = comparacao.set_index('modelo').loc[NOME_V11]
 diferenca = float(v11['mAP50-95'] - v8['mAP50-95'])
 if abs(diferenca) < 0.00005:
     resultado_principal = 'Os modelos tiveram mAP50-95 praticamente igual na precisão apresentada.'
 else:
-    melhor = 'YOLO11n' if diferenca > 0 else 'YOLOv8n'
+    melhor = NOME_V11 if diferenca > 0 else NOME_V8
     resultado_principal = f'{melhor} obteve o maior mAP50-95, com vantagem de {abs(diferenca) * 100:.2f} pontos percentuais.'
 texto = f"""# Conclusão da execução
 
-Foram treinados YOLOv8n e YOLO11n por {EPOCHS} épocas cada, com imagens de
+Foram treinados {NOME_V8} e {NOME_V11} com limite de {EPOCHS} épocas por modelo,
+com imagens de
 {IMGSZ} pixels, batch {BATCH} e seed {SEED}, a partir de pesos pré-treinados em COCO.
+Foram realizadas {int(v8['epocas_realizadas'])} épocas para {NOME_V8} e
+{int(v11['epocas_realizadas'])} épocas para {NOME_V11}. O parâmetro PATIENCE foi {PATIENCE}.
 Após a auditoria, foram usadas {len(LISTAS['train'])} imagens de treino,
 {len(LISTAS['val'])} de validação e {len(LISTAS['test'])} de teste.
 Os checkpoints foram selecionados na validação, antes da avaliação no teste.
 
-O YOLOv8n obteve mAP50 de {v8['mAP50']:.4f} e mAP50-95 de {v8['mAP50-95']:.4f}.
-O YOLO11n obteve mAP50 de {v11['mAP50']:.4f} e mAP50-95 de {v11['mAP50-95']:.4f}.
+O {NOME_V8} obteve mAP50 de {v8['mAP50']:.4f} e mAP50-95 de {v8['mAP50-95']:.4f}.
+O {NOME_V11} obteve mAP50 de {v11['mAP50']:.4f} e mAP50-95 de {v11['mAP50-95']:.4f}.
 {resultado_principal}
 
+O macro-F1 foi {v8['macro_f1']:.4f} para {NOME_V8} e {v11['macro_f1']:.4f}
+para {NOME_V11}, calculado pela média dos F1 por classe, com o mesmo peso
+para cada classe presente no teste. As tabelas exportadas incluem o F1 de cada classe.
+
 Na GPU {AMBIENTE['gpu']}, a etapa de inferência medida pelo validador levou
-{v8['inferencia_ms']:.2f} ms/imagem para YOLOv8n e {v11['inferencia_ms']:.2f}
-ms/imagem para YOLO11n, com batch 1 e FP32, sem pré/pós-processamento.
+{v8['inferencia_ms']:.2f} ms/imagem para {NOME_V8} e {v11['inferencia_ms']:.2f}
+ms/imagem para {NOME_V11}, com batch 1 e FP32, sem pré/pós-processamento.
 Esses tempos são indicativos desta execução, sem repetições de benchmark.
 
 As imagens com boxes permitem confrontar as previsões com as anotações de referência.
@@ -451,7 +523,8 @@ Guarde o ZIP como cópia dos resultados. O Colab é usado para executar ou
 reproduzir o experimento; a entrega escolhida é o repositório.
 ''')
 codigo('''
-ARQUIVO_ZIP = Path(shutil.make_archive(str(PASTA.parent / 'entrega'), 'zip', root_dir=PASTA))
+nome_zip = f'entrega_{TAMANHO}_ate{EPOCHS}ep_{PASTA.name}'
+ARQUIVO_ZIP = Path(shutil.make_archive(str(PASTA.parent / nome_zip), 'zip', root_dir=PASTA))
 print(f'Arquivo de resultados: {ARQUIVO_ZIP} ({ARQUIVO_ZIP.stat().st_size / 1e6:.1f} MB)')
 try:
     from google.colab import files
@@ -510,14 +583,33 @@ def resultados_salvos():
 
 
 def gerar():
-    notebook = {'cells': celulas[:1] + resultados_salvos() + celulas[1:],
-                'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
-                             'language_info': {'name': 'python'}, 'accelerator': 'GPU',
-                             'colab': {'name': 'yolo_epi.ipynb', 'provenance': []}},
-                'nbformat': 4, 'nbformat_minor': 5}
-    destino = RAIZ / 'yolo_epi.ipynb'
-    destino.write_text(json.dumps(notebook, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
-    print(f'Gerado: {destino} ({len(notebook["cells"])} células)')
+    for nome, tamanho, epocas, patience in [('yolo_epi.ipynb', 'n', 30, 0), ('experimento.ipynb', 's', 50, 10)]:
+        conteudo = deepcopy(celulas)
+        next(c for c in conteudo if c['id'] == 'parametros')['source'] = fonte_parametros(tamanho, epocas, patience=patience)
+        if nome == 'yolo_epi.ipynb':
+            conteudo = conteudo[:1] + resultados_salvos() + conteudo[1:]
+        else:
+            conteudo[0]['source'] = textwrap.dedent('''
+            # Novo experimento: YOLOv8 versus YOLO11
+
+            Ajuste os parâmetros abaixo e use **Executar tudo** no Colab com GPU.
+            A configuração inicial é **YOLOv8s e YOLO11s, até 50 épocas, resolução 640**.
+            A parada antecipada está ativa: **PATIENCE = 10**, baseada na validação.
+            Os dois modelos serão treinados a partir dos pesos oficiais pré-treinados em COCO.
+
+            Este experimento ainda não foi executado. As métricas serão geradas pelo treinamento.
+            A [entrega original com modelos nano](https://github.com/ygorbrandaoo/yolo-epi)
+            permanece disponível para comparação. Uma melhora não é garantida.
+            O dataset e os pesos iniciais são baixados automaticamente.
+            ''').strip() + '\n'
+        notebook = {'cells': conteudo,
+                    'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
+                                 'language_info': {'name': 'python'}, 'accelerator': 'GPU',
+                                 'colab': {'name': nome, 'provenance': []}},
+                    'nbformat': 4, 'nbformat_minor': 5}
+        destino = RAIZ / nome
+        destino.write_text(json.dumps(notebook, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
+        print(f'Gerado: {destino} ({len(notebook["cells"])} células)')
 
 
 if __name__ == '__main__':

@@ -3,6 +3,8 @@ import unittest
 import json
 import base64
 import csv
+import ast
+from types import SimpleNamespace
 from pathlib import Path
 
 from auditoria import preparar_divisoes, ler_boxes, resumir_classes
@@ -78,6 +80,12 @@ class AuditoriaTest(unittest.TestCase):
         self.assertEqual([r['classe'] for r in linhas], ['helmet', 'boots'])
         self.assertEqual([r['AP50-95'] for r in linhas], [0.3, 0.2])
 
+    def test_f1_por_classe_e_zero_sem_predicoes(self):
+        linhas = resumir_classes('modelo', {0: 'helmet', 1: 'boots'},
+                                 [2, 3], [0], [0.5], [1.0], [0.4], [0.2])
+        self.assertAlmostEqual(linhas[0]['f1'], 2 / 3)
+        self.assertEqual(linhas[1]['f1'], 0)
+
 
 class NotebookTest(unittest.TestCase):
     def test_notebook_inclui_metricas_e_imagens_reais_da_execucao(self):
@@ -115,6 +123,87 @@ class NotebookTest(unittest.TestCase):
         exec(compile(fonte, 'auditoria_no_notebook', 'exec'), contexto)
         linhas = contexto['resumir_classes']('teste', {0: 'helmet'}, [1], [], [], [], [], [])
         self.assertEqual(linhas[0]['AP50'], 0.0)
+
+
+class ExperimentoTest(unittest.TestCase):
+    def notebook(self):
+        caminho = Path(__file__).resolve().parent / 'experimento.ipynb'
+        return json.loads(caminho.read_text(encoding='utf-8'))
+
+    def configurar(self, **valores):
+        fonte = next(c['source'] for c in self.notebook()['cells'] if c['id'] == 'parametros')
+        arvore = ast.parse(fonte)
+        for node in arvore.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                nome = getattr(node.targets[0], 'id', None)
+                if nome in valores:
+                    node.value = ast.Constant(valores[nome])
+        contexto = {}
+        exec(compile(ast.fix_missing_locations(arvore), 'parametros', 'exec'), contexto)
+        return contexto
+
+    def test_configuracao_inicial_usa_small_e_cinquenta_epocas(self):
+        contexto = self.configurar()
+        self.assertEqual(contexto['MODELOS'], {'YOLOv8s': 'yolov8s.pt', 'YOLO11s': 'yolo11s.pt'})
+        self.assertEqual(contexto['EPOCHS'], 50)
+        self.assertEqual(contexto['IMGSZ'], 640)
+
+    def test_parada_antecipada_esta_ativa_e_chega_ao_treinador(self):
+        contexto = self.configurar()
+        self.assertEqual(contexto['PATIENCE'], 10)
+        contexto = self.configurar(PATIENCE=7)
+        fonte = next(c['source'] for c in self.notebook()['cells']
+                     if c['cell_type'] == 'code' and 'PARAMETROS = dict(' in c['source'])
+        node = next(n for n in ast.parse(fonte).body if isinstance(n, ast.Assign)
+                    and getattr(n.targets[0], 'id', None) == 'PARAMETROS')
+        contexto['DEVICE'] = 0
+        exec(compile(ast.Module(body=[node], type_ignores=[]), 'treinador', 'exec'), contexto)
+        self.assertEqual(contexto['PARAMETROS']['patience'], 7)
+        self.assertEqual(contexto['PARAMETROS']['epochs'], 50)
+
+    def test_tamanho_altera_os_dois_modelos(self):
+        for tamanho in ['n', 's', 'm']:
+            with self.subTest(tamanho=tamanho):
+                contexto = self.configurar(TAMANHO=tamanho, EPOCHS=2, BATCH=8)
+                self.assertEqual(list(contexto['MODELOS'].values()),
+                                 [f'yolov8{tamanho}.pt', f'yolo11{tamanho}.pt'])
+                self.assertEqual(contexto['BATCH'], 8)
+
+    def test_parametros_invalidos_falham_antes_de_baixar_e_treinar(self):
+        for valores in [{'TAMANHO': 'x'}, {'EPOCHS': 0}, {'BATCH': -1},
+                        {'IMGSZ': 641}, {'SEED': -1}, {'LR0': 0},
+                        {'CONF_VISUAL': 1.5}, {'PATIENCE': -1}, {'PATIENCE': 2.5}]:
+            with self.subTest(valores=valores), self.assertRaises(ValueError):
+                self.configurar(**valores)
+
+    def test_conclusao_funciona_com_nomes_dos_modelos_escolhidos(self):
+        fonte = next(c['source'] for c in self.notebook()['cells']
+                     if c['cell_type'] == 'code' and c['source'].startswith('v8 = comparacao.set_index'))
+        for tamanho in ['n', 's', 'm']:
+            with self.subTest(tamanho=tamanho), tempfile.TemporaryDirectory() as pasta:
+                contexto = self.configurar(TAMANHO=tamanho)
+                resultado = {'mAP50': 0.5, 'mAP50-95': 0.3, 'macro_f1': 0.4,
+                             'inferencia_ms': 10.0, 'epocas_realizadas': 37}
+                contexto.update(comparacao=SimpleNamespace(set_index=lambda _: SimpleNamespace(
+                    loc={nome: resultado for nome in contexto['MODELOS']})),
+                    AMBIENTE={'gpu': 'teste'}, PASTA=Path(pasta),
+                    LISTAS={'train': [1], 'val': [2], 'test': [3]},
+                    CONTAGENS={'test': [1]}, NOMES={0: 'helmet'},
+                    display=lambda _: None, Markdown=lambda texto: texto)
+                exec(compile(fonte, 'conclusao', 'exec'), contexto)
+                texto = (Path(pasta) / 'conclusao.md').read_text(encoding='utf-8')
+                self.assertIn(f'YOLOv8{tamanho}', texto)
+                self.assertIn(f'YOLO11{tamanho}', texto)
+                self.assertIn('37', texto)
+                self.assertIn('limite de 50', texto)
+
+    def test_notebook_novo_tem_sintaxe_valida_sem_saidas_antigas(self):
+        notebook = self.notebook()
+        for celula in notebook['cells']:
+            if celula['cell_type'] == 'code':
+                compile(celula['source'], celula['id'], 'exec')
+                self.assertFalse(celula['outputs'])
+        self.assertFalse(any(c.get('attachments') for c in notebook['cells']))
 
 
 if __name__ == '__main__':

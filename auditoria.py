@@ -71,10 +71,13 @@ def resumir_classes(modelo, nomes, contagens, indices, precisao, recall, ap50, a
         if not contagens[classe]:
             continue
         i = posicoes.get(classe)
+        p = float(precisao[i]) if i is not None else 0.0
+        r = float(recall[i]) if i is not None else 0.0
         linhas.append({'modelo': modelo, 'classe': nomes[classe],
                        'boxes_teste': contagens[classe],
-                       'precisao': float(precisao[i]) if i is not None else 0.0,
-                       'recall': float(recall[i]) if i is not None else 0.0,
+                       'precisao': p,
+                       'recall': r,
+                       'f1': 2 * p * r / (p + r) if p + r else 0.0,
                        'AP50': float(ap50[i]) if i is not None else 0.0,
                        'AP50-95': float(ap[i]) if i is not None else 0.0})
     return linhas
