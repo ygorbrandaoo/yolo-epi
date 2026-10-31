@@ -1,0 +1,5 @@
+{
+  "arquivo_original": "entrega_s_ate50ep_20261031_013050_807511.zip",
+  "sha256": "67cf58fad2a7cefd396f6a80eec8f98308045ed5107fad11256e26bfa57c2a40",
+  "descricao": "Segunda execução real no Colab, modelos small e limite de 50 épocas; resultados e melhores pesos copiados sem alterar os arquivos."
+}

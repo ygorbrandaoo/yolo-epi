@@ -1,0 +1,64 @@
+{
+  "resumo": {
+    "train": {
+      "imagens_originais": 1132,
+      "imagens_usadas": 1132,
+      "duplicatas_excluidas": 0,
+      "boxes": 9098
+    },
+    "val": {
+      "imagens_originais": 143,
+      "imagens_usadas": 143,
+      "duplicatas_excluidas": 0,
+      "boxes": 1172
+    },
+    "test": {
+      "imagens_originais": 141,
+      "imagens_usadas": 141,
+      "duplicatas_excluidas": 0,
+      "boxes": 1251
+    }
+  },
+  "duplicatas": [],
+  "boxes_por_classe": {
+    "train": [
+      1341,
+      1146,
+      1269,
+      1235,
+      419,
+      651,
+      1770,
+      400,
+      337,
+      442,
+      88
+    ],
+    "val": [
+      201,
+      136,
+      171,
+      151,
+      47,
+      81,
+      239,
+      45,
+      41,
+      56,
+      4
+    ],
+    "test": [
+      192,
+      163,
+      178,
+      211,
+      52,
+      65,
+      236,
+      40,
+      33,
+      58,
+      23
+    ]
+  }
+}

@@ -549,30 +549,76 @@ Detection Dataset*, versão 1.0.0, 2025, Ultralytics.
 ''')
 
 
-def resultados_salvos():
-    pasta = RAIZ / 'resultados'
+def gerar_resumo():
+    gerais, classes = [], []
+    modelos = []
+    for pasta in [RAIZ / 'resultados', RAIZ / 'resultados/small']:
+        if not (pasta / 'comparacao.csv').is_file():
+            continue
+        with (pasta / 'comparacao_por_classe.csv').open(encoding='utf-8') as arquivo:
+            registros = list(csv.DictReader(arquivo))
+        for registro in registros:
+            p, r = float(registro['precisao']), float(registro['recall'])
+            registro['f1'] = 2 * p * r / (p + r) if p + r else 0.0
+        classes.extend(registros)
+        with (pasta / 'comparacao.csv').open(encoding='utf-8') as arquivo:
+            linhas = list(csv.DictReader(arquivo))
+        for linha in linhas:
+            nome = linha['modelo']
+            modelos.append(nome)
+            valores = [x['f1'] for x in registros if x['modelo'] == nome]
+            linha['macro_f1'] = sum(valores) / len(valores)
+            with (pasta / 'treinos' / nome.lower() / 'results.csv').open(encoding='utf-8') as historico:
+                linha['epocas_realizadas'] = len(list(csv.DictReader(historico)))
+            gerais.append(linha)
+    campos = ['modelo', 'epocas_realizadas', 'precisao', 'recall', 'macro_f1', 'mAP50',
+              'mAP50-95', 'inferencia_ms', 'tempo_treino_min', 'parametros_milhoes', 'pesos_MB']
+    with (RAIZ / 'resultados/comparacao_geral.csv').open('w', encoding='utf-8', newline='') as arquivo:
+        escritor = csv.DictWriter(arquivo, fieldnames=campos)
+        escritor.writeheader()
+        escritor.writerows(gerais)
+    nomes_classes = list(dict.fromkeys(x['classe'] for x in classes))
+    with (RAIZ / 'resultados/f1_por_classe.csv').open('w', encoding='utf-8', newline='') as arquivo:
+        escritor = csv.DictWriter(arquivo, fieldnames=['classe', *modelos])
+        escritor.writeheader()
+        for classe in nomes_classes:
+            escritor.writerow({'classe': classe, **{x['modelo']: x['f1'] for x in classes if x['classe'] == classe}})
+
+
+def resultados_salvos(pasta=None):
+    pasta = pasta or RAIZ / 'resultados'
     if not (pasta / 'comparacao.csv').is_file():
         return []
     with (pasta / 'comparacao.csv').open(encoding='utf-8') as arquivo:
         linhas = list(csv.DictReader(arquivo))
-    tabela = ['| Modelo | Precisão | Recall | mAP50 | mAP50-95 | Inferência |',
-              '|---|---:|---:|---:|---:|---:|']
+    with (RAIZ / 'resultados/comparacao_geral.csv').open(encoding='utf-8') as arquivo:
+        resumo = {x['modelo']: x for x in csv.DictReader(arquivo)}
+    configuracao = json.loads((pasta / 'configuracao.json').read_text(encoding='utf-8'))
+    origem = json.loads((pasta / 'origem.json').read_text(encoding='utf-8'))
+    tabela = ['| Modelo | Precisão | Recall | Macro-F1 | mAP50 | mAP50-95 | Inferência |',
+              '|---|---:|---:|---:|---:|---:|---:|']
     for linha in linhas:
-        valores = [f"{float(linha[k]) * 100:.2f}%" for k in ['precisao', 'recall', 'mAP50', 'mAP50-95']]
+        registro = resumo[linha['modelo']]
+        valores = [f"{float(registro[k]) * 100:.2f}%" for k in ['precisao', 'recall', 'macro_f1', 'mAP50', 'mAP50-95']]
         tabela.append('| ' + ' | '.join([linha['modelo'], *valores, f"{float(linha['inferencia_ms']):.2f} ms"]) + ' |')
     introducao = ('## Resultados da execução salva\n\n'
-                  'Execução realizada no Google Colab em 30/10/2026, com Tesla T4 e 30 épocas por modelo. '
-                  'As tabelas e imagens desta seção foram importadas dos arquivos reais de `entrega.zip`, '
-                  'enviado após a execução. Não é necessário treinar novamente para consultar estes resultados. '
+                  f"Execução realizada no Google Colab, com {configuracao['ambiente']['gpu']} e limite de {configuracao['treino']['epochs']} épocas por modelo. "
+                  f"Início registrado em UTC: {configuracao['ambiente']['inicio_utc']}. "
+                  f"As tabelas e imagens foram importadas do arquivo real `{origem['arquivo_original']}`. "
+                  'Não é necessário treinar novamente para consultar estes resultados. '
                   'Os logs de execução das células não estão neste arquivo.\n\n' + '\n'.join(tabela) +
                   '\n\nAvaliação em 141 imagens de teste. Inferência medida pelo validador, '
-                  'batch 1 e FP32, sem pré e pós-processamento.\n')
+                  'batch 1 e FP32, sem pré e pós-processamento. '
+                  'As métricas usam as anotações originais, sem a correção geométrica investigada posteriormente.\n')
     resultado = [{'cell_type': 'markdown', 'id': 'resultado-tabela', 'metadata': {}, 'source': introducao},
                  {'cell_type': 'markdown', 'id': 'resultado-conclusao', 'metadata': {},
                   'source': (pasta / 'conclusao.md').read_text(encoding='utf-8').replace('# Conclusão da execução', '### Conclusão da execução', 1)}]
     figuras = [('comparacao.png', 'Métricas e tempo de inferência no teste'),
                ('comparacao_por_classe.png', 'AP50-95 por classe')]
-    figuras += [(f'visuais/comparacao_{i:02d}.jpg', f'Boxes no teste: exemplo {i}. Referência, YOLOv8n e YOLO11n.') for i in range(1, 7)]
+    if (pasta / 'f1_por_classe.png').is_file():
+        figuras.append(('f1_por_classe.png', 'F1 por classe'))
+    nomes = ' e '.join(x['modelo'] for x in linhas)
+    figuras += [(f'visuais/comparacao_{i:02d}.jpg', f'Boxes no teste: exemplo {i}. Referência e previsões de {nomes}.') for i in range(1, 7)]
     for indice, (caminho, titulo) in enumerate(figuras):
         arquivo = pasta / caminho
         mime = 'image/jpeg' if arquivo.suffix == '.jpg' else 'image/png'
@@ -583,6 +629,7 @@ def resultados_salvos():
 
 
 def gerar():
+    gerar_resumo()
     for nome, tamanho, epocas, patience in [('yolo_epi.ipynb', 'n', 30, 0), ('experimento.ipynb', 's', 50, 10)]:
         conteudo = deepcopy(celulas)
         next(c for c in conteudo if c['id'] == 'parametros')['source'] = fonte_parametros(tamanho, epocas, patience=patience)
@@ -590,18 +637,21 @@ def gerar():
             conteudo = conteudo[:1] + resultados_salvos() + conteudo[1:]
         else:
             conteudo[0]['source'] = textwrap.dedent('''
-            # Novo experimento: YOLOv8 versus YOLO11
+            # Experimento small: YOLOv8s versus YOLO11s
 
             Ajuste os parâmetros abaixo e use **Executar tudo** no Colab com GPU.
             A configuração inicial é **YOLOv8s e YOLO11s, até 50 épocas, resolução 640**.
             A parada antecipada está ativa: **PATIENCE = 10**, baseada na validação.
             Os dois modelos serão treinados a partir dos pesos oficiais pré-treinados em COCO.
 
-            Este experimento ainda não foi executado. As métricas serão geradas pelo treinamento.
-            A [entrega original com modelos nano](https://github.com/ygorbrandaoo/yolo-epi)
-            permanece disponível para comparação. Uma melhora não é garantida.
+            Os resultados da execução já realizada aparecem abaixo, importados dos arquivos do Colab.
+            Ambos os modelos completaram 50 épocas. A comparação dos quatro modelos e os
+            desafios de dados estão no [README do projeto](https://github.com/ygorbrandaoo/yolo-epi).
+            Os resultados preservam as anotações originais; a hipótese de correção geométrica
+            ainda não foi validada em novo treinamento. Editar os parâmetros inicia outra execução.
             O dataset e os pesos iniciais são baixados automaticamente.
             ''').strip() + '\n'
+            conteudo = conteudo[:1] + resultados_salvos(RAIZ / 'resultados/small') + conteudo[1:]
         notebook = {'cells': conteudo,
                     'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
                                  'language_info': {'name': 'python'}, 'accelerator': 'GPU',

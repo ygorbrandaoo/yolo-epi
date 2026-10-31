@@ -203,7 +203,32 @@ class ExperimentoTest(unittest.TestCase):
             if celula['cell_type'] == 'code':
                 compile(celula['source'], celula['id'], 'exec')
                 self.assertFalse(celula['outputs'])
-        self.assertFalse(any(c.get('attachments') for c in notebook['cells']))
+        anexos = {nome: conteudo for c in notebook['cells']
+                  for nome, conteudo in c.get('attachments', {}).items()}
+        raiz = Path(__file__).resolve().parent
+        self.assertEqual(base64.b64decode(anexos['comparacao_03.jpg']['image/jpeg']),
+                         (raiz / 'resultados/small/visuais/comparacao_03.jpg').read_bytes())
+
+
+class EntregaTest(unittest.TestCase):
+    def test_comparacao_geral_cobre_quatro_modelos_e_epocas_reais(self):
+        raiz = Path(__file__).resolve().parent
+        with (raiz / 'resultados/comparacao_geral.csv').open() as arquivo:
+            linhas = list(csv.DictReader(arquivo))
+        self.assertEqual([x['modelo'] for x in linhas], ['YOLOv8n', 'YOLO11n', 'YOLOv8s', 'YOLO11s'])
+        self.assertEqual([int(x['epocas_realizadas']) for x in linhas], [30, 30, 50, 50])
+        self.assertAlmostEqual(float(linhas[1]['macro_f1']), 0.5219725410254753)
+        self.assertAlmostEqual(float(linhas[3]['macro_f1']), 0.5645790074061087)
+
+    def test_f1_por_classe_preserva_resultados_originais(self):
+        raiz = Path(__file__).resolve().parent
+        with (raiz / 'resultados/f1_por_classe.csv').open() as arquivo:
+            linhas = list(csv.DictReader(arquivo))
+        self.assertEqual(len(linhas), 11)
+        botas = next(x for x in linhas if x['classe'] == 'no_boots')
+        self.assertTrue(all(float(botas[n]) == 0 for n in ['YOLOv8n', 'YOLO11n', 'YOLOv8s', 'YOLO11s']))
+        capacete = next(x for x in linhas if x['classe'] == 'helmet')
+        self.assertAlmostEqual(float(capacete['YOLO11s']), 0.9199516088840325)
 
 
 if __name__ == '__main__':
