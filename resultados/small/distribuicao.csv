@@ -1,0 +1,12 @@
+classe,train,val,test
+helmet,1341,201,192
+gloves,1146,136,163
+vest,1269,171,178
+boots,1235,151,211
+goggles,419,47,52
+none,651,81,65
+Person,1770,239,236
+no_helmet,400,45,40
+no_goggle,337,41,33
+no_gloves,442,56,58
+no_boots,88,4,23
